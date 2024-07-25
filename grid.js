@@ -1,7 +1,7 @@
 class SquareGrid {
     #canvas;
     #context;
-    #grid = [];
+    #grid;
     #onClickCallback;
     #minSize = 5;
     #defaultColor = "white";
@@ -38,13 +38,8 @@ class SquareGrid {
             this.#onClickCallback = onClickCallback;
         }
         // initialize the array holding the grid data
-        for (let i = 0; i < rows; i++) {
-            const row = [];
-            for (let j = 0; j < columns; j++) {
-                row.push(0);
-            }
-            this.#grid.push(row);
-        }
+        this.#grid = new Array(rows).fill(null).map(() => new Array(columns).fill(0));
+
         // create the canvas
         const canvas = document.createElement('canvas');
         canvas.classList.add('squareGrid');
