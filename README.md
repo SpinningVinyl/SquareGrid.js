@@ -2,6 +2,8 @@
 
 A small JS library for drawing and manipulating a grid of squares. Could be used to implement simple games (e.g. Tetris, Snake or Conway's game of life), visualise pathfinding algorithms, etc.
 
+![Demo screenshot](demo.png)
+
 ## Features
 
 - clean JS with no external dependencies
