@@ -38,7 +38,10 @@ class SquareGrid {
             this.#onClickCallback = onClickCallback;
         }
         // initialize the array holding the grid data
-        this.#grid = new Array(rows).fill(null).map(() => new Array(columns).fill(0));
+        this.#grid = new Array(rows)
+            .fill(null)
+            .map(() => new Array(columns)
+                 .fill(0));
 
         // create the canvas
         const canvas = document.createElement('canvas');
