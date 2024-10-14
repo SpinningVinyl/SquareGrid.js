@@ -84,6 +84,14 @@ class SquareGrid {
         return grid[row][column] ? grid[row][column] : this.#defaultColor;
     }
 
+    getRows = () => {
+        return this.rows;
+    }
+
+    getColumns = () => {
+        return this.columns;
+    }
+
     // draw one individiual cell
     #drawCell = (row, column) => {
         this.#fillCell(row, column);
