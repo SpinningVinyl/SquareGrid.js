@@ -111,7 +111,7 @@ class SquareGrid {
     clearGrid = () => {
         const grid = this.#grid;
         const { rows, columns } = this;
-        for (let row = 0; row < rows; i++) {
+        for (let row = 0; row < rows; row++) {
             for (let column = 0; column < columns; column++) {
                 grid[row][column] = 0;
             }
