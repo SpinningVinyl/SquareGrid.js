@@ -112,7 +112,7 @@ class SquareGrid {
         const grid = this.#grid;
         const { rows, columns } = this;
         for (let row = 0; row < rows; i++) {
-            for (let column = 0; i < columns; i++) {
+            for (let column = 0; column < columns; i++) {
                 grid[row][column] = 0;
             }
         }
