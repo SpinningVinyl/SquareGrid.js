@@ -9,15 +9,40 @@ class SquareGrid {
     #alwaysDrawGrid = false;
     #autoRedraw = true;
 
+    static #assertPositiveInteger(name, value) {
+        if (typeof value !== 'number') {
+            throw new TypeError(`${name} must be a number.`);
+        }
+        if (!Number.isInteger(value) || value <= 0) {
+            throw new RangeError(`${name} must be a positive integer.`);
+        }
+    }
+
+    static #assertCallback(callback) {
+        if (callback !== undefined && typeof callback !== 'function') {
+            throw new TypeError('onClickCallback must be a function.');
+        }
+    }
+
+    static #assertParentElement(parentElement) {
+        if (
+            parentElement === null ||
+            parentElement === undefined ||
+            typeof parentElement.appendChild !== 'function'
+        ) {
+            throw new TypeError('parentElement must support appendChild().');
+        }
+    }
+
     constructor(rows = 50, columns = 50, squareSize = 20, parentElement, onClickCallback) {
-        if (rows < 1 || columns < 1) {
-            throw new Error('Number of rows and columns should be equal to or greater than 1.');
-        }
-        if (!parentElement) {
-            throw new Error('Parent element not provided.')
-        }
+        SquareGrid.#assertPositiveInteger('rows', rows);
+        SquareGrid.#assertPositiveInteger('columns', columns);
+        SquareGrid.#assertPositiveInteger('squareSize', squareSize);
+        SquareGrid.#assertParentElement(parentElement);
+        SquareGrid.#assertCallback(onClickCallback);
+
         if (squareSize < this.#minSize) {
-            throw new Error(`Requested square size (${squareSize}) less than the minimum allowed size (${this.#minSize}).`);
+            throw new RangeError(`squareSize must be at least ${this.#minSize}.`);
         }
         // cell size and the dimensions of the grid are read only properties
         Object.defineProperties(this, {
@@ -53,6 +78,7 @@ class SquareGrid {
         this.#canvas = canvas;
         // scale the canvas by window.devicePixelRatio and get scaled context
         this.#context = this.setPixelDensity();
+        this.redraw();
     }
     
 
@@ -67,6 +93,7 @@ class SquareGrid {
     }
 
     setOnClickCallback = (onClickCallback) => {
+        SquareGrid.#assertCallback(onClickCallback);
         this.#onClickCallback = onClickCallback;
     }
     
@@ -174,12 +201,19 @@ class SquareGrid {
 
     // check that the cell coordinates are in bounds
     checkCellCoords = (row, column) => {
-        const { rows, columns } = this;
-        if (row < 0 || row >= rows) {
-            throw new Error(`Row ${row} out of bounds [0, ${rows}).`);
+        this.#checkCellCoordinate('row', row, this.rows);
+        this.#checkCellCoordinate('column', column, this.columns);
+    }
+
+    #checkCellCoordinate = (name, value, upperBound) => {
+        if (typeof value !== 'number') {
+            throw new TypeError(`${name} must be a number.`);
         }
-        if (column < 0 || column >= columns) {
-            throw new Error(`Column ${column} out of bounds [0, ${columns}).`);
+        if (!Number.isInteger(value) || value < 0) {
+            throw new RangeError(`${name} must be a non-negative integer.`);
+        }
+        if (value >= upperBound) {
+            throw new RangeError(`${name} ${value} is out of bounds [0, ${upperBound}).`);
         }
     }
 
