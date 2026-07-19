@@ -8,6 +8,8 @@ class SquareGrid {
     #gridColor = "black";
     #alwaysDrawGrid = false;
     #autoRedraw = true;
+    #pixelRatioQuery;
+    #destroyed = false;
 
     static #assertPositiveInteger(name, value) {
         if (typeof value !== 'number') {
@@ -79,6 +81,43 @@ class SquareGrid {
         // scale the canvas by window.devicePixelRatio and get scaled context
         this.#context = this.setPixelDensity();
         this.redraw();
+        this.#watchPixelRatio();
+    }
+
+    #onPixelRatioChange = () => {
+        if (this.#destroyed) {
+            return;
+        }
+
+        this.#context = this.setPixelDensity();
+        this.redraw();
+        this.#watchPixelRatio();
+    }
+
+    #watchPixelRatio = () => {
+        if (this.#destroyed || typeof window.matchMedia !== 'function') {
+            return;
+        }
+
+        if (this.#pixelRatioQuery) {
+            this.#pixelRatioQuery.removeEventListener('change', this.#onPixelRatioChange);
+        }
+
+        const pixelRatio = window.devicePixelRatio || 1;
+        this.#pixelRatioQuery = window.matchMedia(`(resolution: ${pixelRatio}dppx)`);
+        this.#pixelRatioQuery.addEventListener('change', this.#onPixelRatioChange);
+    }
+
+    destroy = () => {
+        if (this.#destroyed) {
+            return;
+        }
+
+        this.#destroyed = true;
+        this.#canvas.removeEventListener('click', this.onMouseClick);
+        this.#pixelRatioQuery?.removeEventListener('change', this.#onPixelRatioChange);
+        this.#pixelRatioQuery = undefined;
+        this.#onClickCallback = undefined;
     }
     
 
@@ -220,17 +259,20 @@ class SquareGrid {
     // HiDPI-ready canvas, oh yeah
     setPixelDensity = () => {
         const canvas = this.#canvas;
-        let pixelRatio = window.devicePixelRatio; // get pixel ratio of the browser window
-        const actualSize = canvas.getBoundingClientRect(); // get the actual size of the canvas
-        // multiply the canvas size by the pixel ratio
-        canvas.width = actualSize.width * pixelRatio;
-        canvas.height = actualSize.height * pixelRatio;
-        // shrink the display size back down by the pixel ratio == pin-sharp images even on scaled displays
-        canvas.style.width = `${canvas.width / pixelRatio}px`;
-        canvas.style.height = `${canvas.height / pixelRatio}px`;
+        const { rows, columns, squareSize } = this;
+        const pixelRatio = window.devicePixelRatio || 1;
+        const logicalWidth = columns * squareSize + 2;
+        const logicalHeight = rows * squareSize + 2;
+
+        // Keep the display dimensions stable and round the backing store up so
+        // fractional pixel ratios cannot clip the rightmost or bottom strokes.
+        canvas.style.width = `${logicalWidth}px`;
+        canvas.style.height = `${logicalHeight}px`;
+        canvas.width = Math.ceil(logicalWidth * pixelRatio);
+        canvas.height = Math.ceil(logicalHeight * pixelRatio);
+
         const cxt = canvas.getContext('2d');
-        // scale the context to make sure that we can draw on it "as before"
-        cxt.scale(pixelRatio, pixelRatio);
+        cxt.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
         return cxt;
     }
 
