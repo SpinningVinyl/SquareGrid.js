@@ -211,18 +211,22 @@ class SquareGrid {
 
     xToColumn = (x) => {
         const canvas = this.#canvas;
-        const { columns } = this;
-        const columnWidth = canvas.getBoundingClientRect().width / columns;
-        const column = Math.floor(x / columnWidth);
-        return Math.min(column, columns);
+        const { columns, squareSize } = this;
+        const displayWidth = canvas.getBoundingClientRect().width;
+        const logicalWidth = columns * squareSize + 2;
+        const logicalX = x * logicalWidth / displayWidth;
+        const column = Math.floor((logicalX - 1) / squareSize);
+        return Math.max(0, Math.min(column, columns - 1));
     }
 
     yToRow = (y) => {
         const canvas = this.#canvas;
-        const { rows } = this;
-        const rowHeight = canvas.getBoundingClientRect().height / rows;
-        const row = Math.floor(y / rowHeight);
-        return Math.min(row, rows);
+        const { rows, squareSize } = this;
+        const displayHeight = canvas.getBoundingClientRect().height;
+        const logicalHeight = rows * squareSize + 2;
+        const logicalY = y * logicalHeight / displayHeight;
+        const row = Math.floor((logicalY - 1) / squareSize);
+        return Math.max(0, Math.min(row, rows - 1));
     }
     
     setDefaultColor = (color) => {
