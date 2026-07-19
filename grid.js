@@ -9,6 +9,7 @@ class SquareGrid {
     #alwaysDrawGrid = false;
     #autoRedraw = true;
     #pixelRatioQuery;
+    #destroyed = false;
 
     static #assertPositiveInteger(name, value) {
         if (typeof value !== 'number') {
@@ -84,13 +85,17 @@ class SquareGrid {
     }
 
     #onPixelRatioChange = () => {
+        if (this.#destroyed) {
+            return;
+        }
+
         this.#context = this.setPixelDensity();
         this.redraw();
         this.#watchPixelRatio();
     }
 
     #watchPixelRatio = () => {
-        if (typeof window.matchMedia !== 'function') {
+        if (this.#destroyed || typeof window.matchMedia !== 'function') {
             return;
         }
 
@@ -101,6 +106,18 @@ class SquareGrid {
         const pixelRatio = window.devicePixelRatio || 1;
         this.#pixelRatioQuery = window.matchMedia(`(resolution: ${pixelRatio}dppx)`);
         this.#pixelRatioQuery.addEventListener('change', this.#onPixelRatioChange);
+    }
+
+    destroy = () => {
+        if (this.#destroyed) {
+            return;
+        }
+
+        this.#destroyed = true;
+        this.#canvas.removeEventListener('click', this.onMouseClick);
+        this.#pixelRatioQuery?.removeEventListener('change', this.#onPixelRatioChange);
+        this.#pixelRatioQuery = undefined;
+        this.#onClickCallback = undefined;
     }
     
 

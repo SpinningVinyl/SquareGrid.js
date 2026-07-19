@@ -11,6 +11,8 @@ A small JS library for drawing and manipulating a grid of squares. Could be used
 
 ## Usage
 
+Responsive CSS sizing is not supported. SquareGrid works best with a fixed-size canvas.
+
 ### Create a new grid
 
 ```
@@ -125,6 +127,16 @@ To redraw the canvas manually:
 ```
 myGrid.redraw();
 ```
+
+### Destroy the grid
+
+When a grid is no longer needed, remove its event listeners:
+
+```
+myGrid.destroy();
+```
+
+This does not remove the canvas element from the document.
 
 ### On click callback
 
