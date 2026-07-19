@@ -76,10 +76,10 @@ class SquareGrid {
         canvas.setAttribute('width', columns * squareSize + 2);
         canvas.setAttribute('height', rows * squareSize + 2);
         parentElement.appendChild(canvas);
-        canvas.addEventListener('click', this.onMouseClick);
+        canvas.addEventListener('click', this.#onMouseClick);
         this.#canvas = canvas;
         // scale the canvas by window.devicePixelRatio and get scaled context
-        this.#context = this.setPixelDensity();
+        this.#context = this.#setPixelDensity();
         this.redraw();
         this.#watchPixelRatio();
     }
@@ -89,7 +89,7 @@ class SquareGrid {
             return;
         }
 
-        this.#context = this.setPixelDensity();
+        this.#context = this.#setPixelDensity();
         this.redraw();
         this.#watchPixelRatio();
     }
@@ -114,17 +114,17 @@ class SquareGrid {
         }
 
         this.#destroyed = true;
-        this.#canvas.removeEventListener('click', this.onMouseClick);
+        this.#canvas.removeEventListener('click', this.#onMouseClick);
         this.#pixelRatioQuery?.removeEventListener('change', this.#onPixelRatioChange);
         this.#pixelRatioQuery = undefined;
         this.#onClickCallback = undefined;
     }
     
 
-    onMouseClick = (event) => {
-        const mouseCoords = this.getMouseCoordinates(event);
-        const row = this.yToRow(mouseCoords.y);
-        const column = this.xToColumn(mouseCoords.x);
+    #onMouseClick = (event) => {
+        const mouseCoords = this.#getMouseCoordinates(event);
+        const row = this.#yToRow(mouseCoords.y);
+        const column = this.#xToColumn(mouseCoords.x);
         // console.log(`row ${row}, column ${column}`);
         if (this.#onClickCallback) {
             this.#onClickCallback(row, column, event);
@@ -137,7 +137,7 @@ class SquareGrid {
     }
     
     setCellColor = (row, column, color) => {
-        this.checkCellCoords(row, column);
+        this.#checkCellCoords(row, column);
         this.#grid[row][column] = color;
         if (this.#autoRedraw) {
             this.#drawCell(row, column);
@@ -145,7 +145,7 @@ class SquareGrid {
     }
     
     getCellColor = (row, column) => {
-        this.checkCellCoords(row, column);
+        this.#checkCellCoords(row, column);
         const grid = this.#grid;
         return grid[row][column] ? grid[row][column] : this.#defaultColor;
     }
@@ -166,7 +166,7 @@ class SquareGrid {
     
     // clear one cell
     clearCell = (row, column) => {
-        this.checkCellCoords(row, column);
+        this.#checkCellCoords(row, column);
         this.#grid[row][column] = 0;
         if (this.#autoRedraw) {
             this.redraw();
@@ -239,7 +239,7 @@ class SquareGrid {
     }
 
     // check that the cell coordinates are in bounds
-    checkCellCoords = (row, column) => {
+    #checkCellCoords = (row, column) => {
         this.#checkCellCoordinate('row', row, this.rows);
         this.#checkCellCoordinate('column', column, this.columns);
     }
@@ -257,7 +257,7 @@ class SquareGrid {
     }
 
     // HiDPI-ready canvas, oh yeah
-    setPixelDensity = () => {
+    #setPixelDensity = () => {
         const canvas = this.#canvas;
         const { rows, columns, squareSize } = this;
         const pixelRatio = window.devicePixelRatio || 1;
@@ -276,7 +276,7 @@ class SquareGrid {
         return cxt;
     }
 
-    getMouseCoordinates = (event) => {
+    #getMouseCoordinates = (event) => {
         const canvas = this.#canvas;
         const rect = canvas.getBoundingClientRect();
         return {
@@ -285,7 +285,7 @@ class SquareGrid {
         };
     }
 
-    xToColumn = (x) => {
+    #xToColumn = (x) => {
         const canvas = this.#canvas;
         const { columns, squareSize } = this;
         const displayWidth = canvas.getBoundingClientRect().width;
@@ -295,7 +295,7 @@ class SquareGrid {
         return Math.max(0, Math.min(column, columns - 1));
     }
 
-    yToRow = (y) => {
+    #yToRow = (y) => {
         const canvas = this.#canvas;
         const { rows, squareSize } = this;
         const displayHeight = canvas.getBoundingClientRect().height;
