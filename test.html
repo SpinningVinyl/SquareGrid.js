@@ -1,0 +1,254 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SquareGrid rendering checks</title>
+<p>This page tests color validation once, and pixel-level rendering at several device pixel ratios.</p>
+<script src="grid.js"></script>
+<pre id="result"></pre>
+<script>
+function checkRedrawing() {
+    const parent = document.createElement('div');
+    const grid = new SquareGrid(2, 2, 20, parent);
+    try {
+        const canvas = parent.firstChild;
+        const context = canvas.getContext('2d');
+        const originalScale = context.getTransform().a;
+        grid.setDefaultColor('red');
+        grid.setCellColor(1, 1, 'black');
+        grid.setDefaultColor('white');
+        grid.clearGrid();
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        if (!pixels.every(value => value === 255) || context.getTransform().a !== originalScale) {
+            throw new Error('Background coverage or transform mismatch');
+        }
+    } finally {
+        grid.destroy();
+    }
+}
+
+function checkBorderRestoration(outlines, border, target) {
+    const grids = [];
+    function makeGrid(omitTarget) {
+        const parent = document.createElement('div');
+        const grid = new SquareGrid(3, 3, 7, parent);
+        grids.push(grid);
+        grid.setAutoRedraw(false);
+        grid.setAlwaysDrawGrid(outlines);
+        grid.setGridColor(border);
+        for (let row = 0; row < 3; row++) {
+            for (let column = 0; column < 3; column++) {
+                if (!omitTarget || row !== target[0] || column !== target[1]) {
+                    grid.setCellColor(row, column, 'rgba(255, 0, 0, 0.5)');
+                }
+            }
+        }
+        grid.redraw();
+        grid.setAutoRedraw(true);
+        const canvas = parent.firstChild;
+        return {grid, pixels: () => canvas.getContext('2d')
+            .getImageData(0, 0, canvas.width, canvas.height).data};
+    }
+    try {
+        const actual = makeGrid(false);
+        const expected = makeGrid(true);
+        actual.grid.clearCell(...target);
+        const reference = expected.pixels();
+        const pixels = actual.pixels();
+        const mismatch = pixels.findIndex((value, index) => value !== reference[index]);
+        if (mismatch !== -1) {
+            throw new Error(`Pixel mismatch at byte ${mismatch}: ${pixels[mismatch]} !== ${reference[mismatch]}`);
+        }
+    } finally {
+        grids.forEach(grid => grid.destroy());
+    }
+}
+
+function checkDrawing(check) {
+    const parent = document.createElement('div');
+    const grid = new SquareGrid(2, 2, 20, parent);
+    const canvas = parent.firstChild;
+    const context = canvas.getContext('2d');
+    const ratio = context.getTransform().a;
+    const pixels = () => context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const expect = (condition, message) => {
+        if (!condition) throw new Error(message);
+    };
+    const expectPixel = (x, y, color) => {
+        const actual = [...context.getImageData(Math.floor(x * ratio), Math.floor(y * ratio), 1, 1).data];
+        expect(actual.join() === color.join(), `Pixel (${x}, ${y}): ${actual} !== ${color}`);
+    };
+    try {
+        check(grid, pixels, expect, expectPixel, context);
+    } finally {
+        grid.destroy();
+    }
+}
+
+const drawingChecks = [
+    ['setCellColor: paint and replace', (grid, pixels, expect, pixel) => {
+        grid.setCellColor(0, 1, 'red');
+        pixel(31, 11, [255, 0, 0, 255]);
+        pixel(11, 11, [255, 255, 255, 255]);
+        grid.setCellColor(0, 1, 'blue');
+        pixel(31, 11, [0, 0, 255, 255]);
+        expect(grid.getCellColor(0, 1) === 'blue', 'Stored cell color was not updated');
+    }],
+    ['setCellColor: translucent replacement', (grid, pixels, expect, pixel) => {
+        grid.setCellColor(0, 0, 'red');
+        grid.setCellColor(0, 0, 'rgba(0, 0, 255, 0.5)');
+        const before = pixels();
+        grid.redraw();
+        expect(pixels().every((value, index) => value === before[index]),
+            'Replacing a translucent cell differs from a full redraw');
+    }],
+    ['clearGrid: clears every cell', (grid, pixels, expect, pixel) => {
+        for (let row = 0; row < 2; row++) {
+            for (let column = 0; column < 2; column++) grid.setCellColor(row, column, 'red');
+        }
+        grid.clearGrid();
+        expect(pixels().every(value => value === 255), 'Cleared grid is not entirely white');
+        for (let row = 0; row < 2; row++) {
+            for (let column = 0; column < 2; column++) {
+                expect(grid.getCellColor(row, column) === 'white', 'Cell data was not cleared');
+            }
+        }
+    }],
+    ['setDefaultColor: preserves explicit cells', (grid, pixels, expect, pixel) => {
+        grid.setCellColor(0, 0, 'red');
+        grid.setDefaultColor('blue');
+        pixel(11, 11, [255, 0, 0, 255]);
+        pixel(31, 31, [0, 0, 255, 255]);
+    }],
+    ['setDefaultColor: transparent background erases old pixels', (grid, pixels, expect, pixel) => {
+        grid.setDefaultColor('transparent');
+        expect(pixels().every(value => value === 0), 'Transparent background retained old pixels');
+    }],
+    ['setGridColor: recolors and disables outlines', (grid, pixels, expect, pixel) => {
+        grid.setAlwaysDrawGrid(true);
+        const black = pixels();
+        grid.setGridColor('red');
+        const red = pixels();
+        expect(red.some((value, index) => value !== black[index]), 'Outline color did not change');
+        for (let index = 0; index < red.length; index += 4) {
+            expect(red[index] === 255 && red[index + 1] === red[index + 2], 'Unexpected outline color');
+        }
+        grid.setGridColor(false);
+        expect(pixels().every(value => value === 255), 'Disabled outlines remain visible');
+    }],
+    ['setAlwaysDrawGrid: toggles empty-cell outlines', (grid, pixels, expect, pixel) => {
+        grid.setAlwaysDrawGrid(true);
+        expect(pixels().some(value => value !== 255), 'Empty-cell outlines were not drawn');
+        grid.setAlwaysDrawGrid(false);
+        expect(pixels().every(value => value === 255), 'Empty-cell outlines were not removed');
+    }]
+];
+
+const deferredChanges = [
+    ['setCellColor', grid => grid.setCellColor(1, 1, 'blue')],
+    ['clearCell', grid => grid.clearCell(0, 0)],
+    ['clearGrid', grid => grid.clearGrid()],
+    ['setDefaultColor', grid => grid.setDefaultColor('blue')],
+    ['setGridColor', grid => grid.setGridColor('blue')],
+    ['setAlwaysDrawGrid', grid => grid.setAlwaysDrawGrid(true)]
+];
+for (const [name, change] of deferredChanges) {
+    drawingChecks.push([`${name}: automatic redraw disabled`, (grid, pixels, expect) => {
+        grid.setCellColor(0, 0, 'red');
+        const before = pixels();
+        grid.setAutoRedraw(false);
+        change(grid);
+        expect(pixels().every((value, index) => value === before[index]), 'Drew while automatic redraw was disabled');
+        grid.setAutoRedraw(true);
+        expect(pixels().every((value, index) => value === before[index]), 'Enabling automatic redraw unexpectedly drew');
+        grid.redraw();
+        expect(pixels().some((value, index) => value !== before[index]), 'Manual redraw did not apply the change');
+        grid.setCellColor(1, 0, 'blue');
+        expect(grid.getAutoRedraw(), 'Automatic redraw was not enabled');
+        const after = pixels();
+        grid.clearCell(1, 0);
+        expect(pixels().some((value, index) => value !== after[index]), 'Automatic redraw did not resume');
+    }]);
+}
+
+const result = document.querySelector('#result');
+let passed = 0;
+let failed = 0;
+function runCheck(name, check) {
+    try {
+        check();
+        result.append(`PASS: ${name}\n`);
+        passed++;
+    } catch (error) {
+        result.append(`FAIL: ${name} — ${error.message}\n`);
+        failed++;
+    }
+}
+
+// Validation is independent of pixel density: run each input once per setter.
+for (const [setter, getter] of [
+    ['setCellColor', 'getCellColor'],
+    ['setDefaultColor', 'getDefaultColor'],
+    ['setGridColor', 'getGridColor']
+]) {
+    for (const [label, color] of [
+        ['unknown name', 'not-a-color'], ['invalid hex', '#gggggg'],
+        ['invalid rgb', 'rgb(nope)'], ['whitespace', ' '],
+        ['empty string', ''], ['null', null], ['undefined', undefined],
+        ['false', false], ['zero', 0], ['NaN', NaN], ['number', 42],
+        ['true', true], ['object', {}], ['array', []],
+        ['black', '#000000'], ['white', '#ffffff'], ['transparent', 'transparent']
+    ]) {
+        const validColor = ['black', 'white', 'transparent'].includes(label);
+        const disablesGrid = setter === 'setGridColor' && !color;
+        const accepts = validColor || disablesGrid;
+        runCheck(`${setter}: ${accepts ? 'accepts' : 'rejects'} ${label}`, () => checkDrawing((grid, pixels, expect, pixel, context) => {
+            const args = setter === 'setCellColor' ? [0, 0] : [];
+            grid[setter](...args, 'red');
+            const before = pixels();
+            const fillStyle = context.fillStyle;
+            let error;
+            try {
+                grid[setter](...args, color);
+            } catch (caught) {
+                error = caught;
+            }
+            if (accepts) {
+                expect(!error, `Unexpected rejection: ${error?.message}`);
+                expect(Object.is(grid[getter](...args), color), 'Accepted value was not stored');
+            } else {
+                expect(error instanceof TypeError, 'Expected a TypeError');
+                expect(grid[getter](...args) === 'red', 'Rejected input changed stored color');
+                expect(pixels().every((value, index) => value === before[index]), 'Rejected input changed rendered pixels');
+                expect(context.fillStyle === fillStyle, 'Rejected input changed canvas fill style');
+            }
+        }));
+    }
+}
+
+const originalRatio = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
+try {
+    for (const ratio of [0.5, 0.8, 1, 1.25, 2]) {
+        Object.defineProperty(window, 'devicePixelRatio', {value: ratio, configurable: true});
+        runCheck(`Redrawing: ratio=${ratio}`, checkRedrawing);
+        for (const [name, check] of drawingChecks) {
+            runCheck(`${name}: ratio=${ratio}`, () => checkDrawing(check));
+        }
+        for (const outlines of [false, true]) {
+            for (const border of ['black', 'rgba(0, 0, 0, 0.5)', false]) {
+                for (const target of [[0, 0], [1, 1], [2, 2]]) {
+                    runCheck(
+                        `Border restoration: ratio=${ratio}, outlines=${outlines}, border=${border}, cell=${target}`,
+                        () => checkBorderRestoration(outlines, border, target)
+                    );
+                }
+            }
+        }
+    }
+} finally {
+    if (originalRatio) {
+        Object.defineProperty(window, 'devicePixelRatio', originalRatio);
+    } else {
+        delete window.devicePixelRatio;
+    }
+}
+result.prepend(`${passed} passed, ${failed} failed\n\n`);
+</script>
