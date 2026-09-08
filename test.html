@@ -25,13 +25,14 @@ function checkRedrawing() {
     }
 }
 
-function checkBorderRestoration(outlines, border, target) {
+function checkBorderRestoration(outlines, border, target, style = 'default') {
     const grids = [];
     function makeGrid(omitTarget) {
         const parent = document.createElement('div');
         const grid = new SquareGrid(3, 3, 7, parent);
         grids.push(grid);
         grid.setAutoRedraw(false);
+        grid.setFillStyle(style);
         grid.setAlwaysDrawGrid(outlines);
         grid.setGridColor(border);
         for (let row = 0; row < 3; row++) {
@@ -142,7 +143,65 @@ const drawingChecks = [
     }]
 ];
 
+for (const style of ['diamond', 'circle']) {
+    drawingChecks.push([`${style}: shape and default-color background`, (grid, pixels, expect, pixel) => {
+        expect(grid.getFillStyle() === 'default', 'Initial style changed');
+        grid.setGridColor(false);
+        grid.setDefaultColor('blue');
+        grid.setFillStyle(style);
+        grid.setCellColor(0, 0, 'red');
+        expect(grid.getFillStyle() === style, 'Style was not stored');
+        pixel(11, 11, [255, 0, 0, 255]);
+        pixel(3, 3, [0, 0, 255, 255]);
+        pixel(31, 31, [0, 0, 255, 255]);
+        if (style === 'circle') pixel(7, 7, [255, 0, 0, 255]);
+        else {
+            const circleCorner = pixels();
+            grid.setFillStyle('circle');
+            expect(pixels().some((value, index) => value !== circleCorner[index]), 'Diamond and circle are identical');
+        }
+    }]);
+    drawingChecks.push([`${style}: recolor and clear`, (grid, pixels, expect, pixel) => {
+        grid.setFillStyle(style);
+        grid.setCellColor(0, 0, 'red');
+        grid.setCellColor(0, 0, 'rgba(0, 0, 255, 0.5)');
+        const before = pixels();
+        grid.redraw();
+        expect(pixels().every((value, index) => value === before[index]), 'Recolored shape differs from redraw');
+        grid.clearCell(0, 0);
+        expect(pixels().every(value => value === 255), 'Cleared shape left pixels behind');
+        grid.setCellColor(1, 1, 'red');
+        grid.clearGrid();
+        expect(pixels().every(value => value === 255), 'clearGrid left shapes behind');
+    }]);
+    drawingChecks.push([`${style}: switching styles preserves colors`, (grid, pixels, expect, pixel) => {
+        grid.setGridColor(false);
+        grid.setCellColor(0, 0, 'red');
+        const original = pixels();
+        grid.setFillStyle(style);
+        pixel(3, 3, [255, 255, 255, 255]);
+        expect(grid.getCellColor(0, 0) === 'red', 'Style changed stored color');
+        grid.setDefaultColor('blue');
+        pixel(3, 3, [0, 0, 255, 255]);
+        pixel(11, 11, [255, 0, 0, 255]);
+        grid.setDefaultColor('white');
+        grid.setFillStyle('default');
+        expect(pixels().every((value, index) => value === original[index]), 'Default fill was not restored');
+    }]);
+    drawingChecks.push([`${style}: transparent background`, (grid, pixels, expect, pixel) => {
+        grid.setGridColor(false);
+        grid.setDefaultColor('transparent');
+        grid.setFillStyle(style);
+        grid.setCellColor(0, 0, 'red');
+        pixel(3, 3, [0, 0, 0, 0]);
+        pixel(11, 11, [255, 0, 0, 255]);
+        grid.clearCell(0, 0);
+        expect(pixels().every(value => value === 0), 'Transparent background retained shape pixels');
+    }]);
+}
+
 const deferredChanges = [
+    ['setFillStyle', grid => grid.setFillStyle('diamond')],
     ['setCellColor', grid => grid.setCellColor(1, 1, 'blue')],
     ['clearCell', grid => grid.clearCell(0, 0)],
     ['clearGrid', grid => grid.clearGrid()],
@@ -224,6 +283,18 @@ for (const [setter, getter] of [
     }
 }
 
+for (const invalid of ['square', '', 'Circle', null, undefined, 42, {}]) {
+    runCheck(`setFillStyle: rejects ${String(invalid)}`, () => checkDrawing((grid, pixels, expect) => {
+        grid.setCellColor(0, 0, 'red');
+        const before = pixels();
+        let error;
+        try { grid.setFillStyle(invalid); } catch (caught) { error = caught; }
+        expect(error instanceof (typeof invalid === 'string' ? RangeError : TypeError), 'Expected validation error');
+        expect(grid.getFillStyle() === 'default', 'Rejected style changed state');
+        expect(pixels().every((value, index) => value === before[index]), 'Rejected style changed pixels');
+    }));
+}
+
 const originalRatio = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
 try {
     for (const ratio of [0.5, 0.8, 1, 1.25, 2]) {
@@ -235,10 +306,12 @@ try {
         for (const outlines of [false, true]) {
             for (const border of ['black', 'rgba(0, 0, 0, 0.5)', false]) {
                 for (const target of [[0, 0], [1, 1], [2, 2]]) {
-                    runCheck(
-                        `Border restoration: ratio=${ratio}, outlines=${outlines}, border=${border}, cell=${target}`,
-                        () => checkBorderRestoration(outlines, border, target)
-                    );
+                    for (const style of ['default', 'diamond', 'circle']) {
+                        runCheck(
+                            `Border restoration: style=${style}, ratio=${ratio}, outlines=${outlines}, border=${border}, cell=${target}`,
+                            () => checkBorderRestoration(outlines, border, target, style)
+                        );
+                    }
                 }
             }
         }
