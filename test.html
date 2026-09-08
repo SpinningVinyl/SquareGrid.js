@@ -200,6 +200,73 @@ for (const style of ['diamond', 'circle']) {
     }]);
 }
 
+for (const style of ['default', 'diamond', 'circle']) {
+    drawingChecks.push([`Active cell (${style}): move and remove`, (grid, pixels, expect, pixel) => {
+        grid.setFillStyle(style);
+        grid.setGridColor(false);
+        grid.setCellColor(0, 0, 'red');
+        grid.setCellColor(0, 1, 'red');
+        grid.redraw();
+        const original = pixels();
+        expect(grid.getActiveCell() === null, 'A cell is initially active');
+        grid.setActiveColor('blue');
+        grid.setActiveCell(0, 0);
+        pixel(3, 11, [0, 0, 255, 255]);
+        pixel(11, 11, [255, 0, 0, 255]);
+        const copy = grid.getActiveCell();
+        copy.row = 99;
+        expect(grid.getActiveCell().row === 0, 'Getter exposed mutable state');
+        grid.setActiveCell(0, 1);
+        pixel(23, 11, [0, 0, 255, 255]);
+        expect(grid.getActiveCell().column === 1, 'Selection did not move');
+        const moved = pixels();
+        grid.redraw();
+        expect(pixels().every((value, index) => value === moved[index]), 'Move differs from full redraw');
+        grid.clearActiveCell();
+        grid.clearActiveCell();
+        expect(grid.getActiveCell() === null, 'Selection was not removed');
+        expect(grid.getCellColor(0, 0) === 'red' && grid.getCellColor(0, 1) === 'red', 'Highlight changed cell colors');
+        expect(pixels().every((value, index) => value === original[index]), 'Highlight left pixels behind');
+    }]);
+    drawingChecks.push([`Active cell (${style}): survives color updates and clearing`, (grid, pixels, expect, pixel) => {
+        grid.setFillStyle(style);
+        grid.setActiveColor('blue');
+        grid.setActiveCell(0, 0);
+        grid.setCellColor(0, 0, 'red');
+        pixel(3, 11, [0, 0, 255, 255]);
+        grid.clearCell(0, 1);
+        pixel(3, 11, [0, 0, 255, 255]);
+        grid.clearCell(0, 0);
+        pixel(3, 11, [0, 0, 255, 255]);
+        pixel(11, 11, [255, 255, 255, 255]);
+        grid.clearGrid();
+        pixel(3, 11, [0, 0, 255, 255]);
+        expect(grid.getActiveCell().row === 0, 'Clearing colors cleared selection');
+        grid.setActiveColor('red');
+        pixel(3, 11, [255, 0, 0, 255]);
+        expect(grid.getActiveColor() === 'red', 'Highlight color was not stored');
+        grid.setDefaultColor('blue');
+        grid.setFillStyle(style === 'circle' ? 'diamond' : 'circle');
+        pixel(3, 11, [255, 0, 0, 255]);
+    }]);
+    drawingChecks.push([`Active cell (${style}): deferred updates`, (grid, pixels, expect) => {
+        grid.setFillStyle(style);
+        const original = pixels();
+        grid.setAutoRedraw(false);
+        grid.setActiveCell(0, 0);
+        grid.setActiveCell(1, 1);
+        grid.setActiveColor('blue');
+        expect(pixels().every((value, index) => value === original[index]), 'Deferred selection drew immediately');
+        grid.redraw();
+        const active = pixels();
+        expect(active.some((value, index) => value !== original[index]), 'Manual redraw did not show selection');
+        grid.clearActiveCell();
+        expect(pixels().every((value, index) => value === active[index]), 'Deferred clearing drew immediately');
+        grid.redraw();
+        expect(pixels().every((value, index) => value === original[index]), 'Manual redraw did not clear selection');
+    }]);
+}
+
 const deferredChanges = [
     ['setFillStyle', grid => grid.setFillStyle('diamond')],
     ['setCellColor', grid => grid.setCellColor(1, 1, 'blue')],
@@ -294,6 +361,29 @@ for (const invalid of ['square', '', 'Circle', null, undefined, 42, {}]) {
         expect(pixels().every((value, index) => value === before[index]), 'Rejected style changed pixels');
     }));
 }
+
+for (const [row, column] of [[-1, 0], [0, -1], [2, 0], [0, 2], [0.5, 0], [0, NaN], ['0', 0], [0, undefined]]) {
+    runCheck(`setActiveCell: rejects (${String(row)}, ${String(column)})`, () => checkDrawing((grid, pixels, expect) => {
+        grid.setActiveCell(0, 0);
+        const before = pixels();
+        let error;
+        try { grid.setActiveCell(row, column); } catch (caught) { error = caught; }
+        expect(error instanceof TypeError || error instanceof RangeError, 'Invalid coordinates were accepted');
+        expect(grid.getActiveCell().row === 0 && grid.getActiveCell().column === 0, 'Invalid coordinates changed selection');
+        expect(pixels().every((value, index) => value === before[index]), 'Invalid coordinates changed pixels');
+    }));
+}
+runCheck('setActiveColor: rejects invalid colors without changing selection', () => checkDrawing((grid, pixels, expect) => {
+    grid.setActiveCell(0, 0);
+    const before = pixels();
+    for (const invalid of ['not-a-color', null, false]) {
+        let error;
+        try { grid.setActiveColor(invalid); } catch (caught) { error = caught; }
+        expect(error instanceof TypeError, 'Invalid highlight color was accepted');
+        expect(grid.getActiveColor() === 'orange', 'Invalid color changed highlight color');
+        expect(pixels().every((value, index) => value === before[index]), 'Invalid color changed pixels');
+    }
+}));
 
 const originalRatio = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
 try {
