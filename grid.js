@@ -192,7 +192,40 @@ class SquareGrid {
         this.#checkCellCoords(row, column);
         this.#grid[row][column] = 0;
         if (this.#autoRedraw) {
-            this.redraw();
+            const context = this.#context;
+            const size = this.squareSize;
+            const transform = context.getTransform();
+            const ratio = transform.a;
+            // Snap to backing pixels, with a one-pixel margin for antialiased edges.
+            const left = Math.floor((column * size + 0.5) * ratio) - 1;
+            const top = Math.floor((row * size + 0.5) * ratio) - 1;
+            const right = Math.ceil((column * size + size + 1.5) * ratio) + 1;
+            const bottom = Math.ceil((row * size + size + 1.5) * ratio) + 1;
+
+            context.save();
+            context.setTransform(1, 0, 0, 1, 0, 0);
+            context.beginPath();
+            context.rect(left, top, right - left, bottom - top);
+            context.clip();
+            context.clearRect(left, top, right - left, bottom - top);
+            context.fillStyle = this.#defaultColor;
+            context.fillRect(left, top, right - left, bottom - top);
+            context.setTransform(transform);
+
+            // Restore intersecting cells in the same order as redraw(), including corners.
+            const firstRow = Math.max(0, Math.floor((top / ratio - 1.5) / size));
+            const lastRow = Math.min(this.rows - 1, Math.floor((bottom / ratio - 0.5) / size));
+            const firstColumn = Math.max(0, Math.floor((left / ratio - 1.5) / size));
+            const lastColumn = Math.min(this.columns - 1, Math.floor((right / ratio - 0.5) / size));
+            for (let r = firstRow; r <= lastRow; r++) {
+                for (let c = firstColumn; c <= lastColumn; c++) {
+                    if (this.#grid[r][c]) {
+                        this.#fillCell(r, c);
+                    }
+                    this.#strokeCell(r, c);
+                }
+            }
+            context.restore();
         }
     }
 
@@ -230,16 +263,21 @@ class SquareGrid {
         if (!gridColor) { // do not draw borders if no color is specified
             return; 
         }
-        
+
         const grid = this.#grid;
+        
+        if (grid[row][column] || this.#alwaysDrawGrid) {
+            this.#strokeCellWithColor(row, column, gridColor);
+        }
+    }
+    
+    #strokeCellWithColor = (row, column, color) => {
         const context = this.#context;
         const { squareSize } = this;
 
-        context.strokeStyle = gridColor;
+        context.strokeStyle = color;
         context.lineWidth = 1;
-        if (grid[row][column] || this.#alwaysDrawGrid) {
-            context.strokeRect(column * squareSize + 1, row * squareSize + 1, squareSize, squareSize);
-        }
+        context.strokeRect(column * squareSize + 1, row * squareSize + 1, squareSize, squareSize);        
     }
     
     // redraw all cells in the grid
@@ -247,8 +285,12 @@ class SquareGrid {
         // fill the canvas with default color
         const canvas = this.#canvas;
         const context = this.#context;
+        // Fill every backing pixel, including rounding at fractional pixel ratios.
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
         context.fillStyle = this.#defaultColor;
         context.fillRect(0, 0, canvas.width, canvas.height);
+        context.restore();
         // draw visible cells
         const grid = this.#grid;
         grid.forEach((row, rowIdx) => {
