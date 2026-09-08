@@ -7,6 +7,8 @@ class SquareGrid {
     #defaultColor = "white";
     #gridColor = "black";
     #fillStyle = "default";
+    #activeCell = null;
+    #activeColor = "orange";
     #alwaysDrawGrid = false;
     #autoRedraw = true;
     #pixelRatioQuery;
@@ -191,15 +193,73 @@ class SquareGrid {
     #drawCell = (row, column) => {
         this.#fillCell(row, column);
         this.#strokeCell(row, column);
+        if (this.#activeCell?.row === row && this.#activeCell.column === column) {
+            this.#drawActiveCell();
+        }
     }
-    
+
+    #drawActiveCell = () => {
+        if (!this.#activeCell) return;
+        const { row, column } = this.#activeCell;
+        const context = this.#context;
+        const size = this.squareSize;
+        const width = Math.min(2, size / 5);
+        const inset = 1 + width / 2;
+        context.save();
+        context.strokeStyle = this.#activeColor;
+        context.lineWidth = width;
+        context.strokeRect(column * size + 1 + inset, row * size + 1 + inset,
+            size - 2 * inset, size - 2 * inset);
+        context.restore();
+    }
+
+    setActiveCell = (row, column) => {
+        this.#checkCellCoords(row, column);
+        const previous = this.#activeCell;
+        this.#activeCell = { row, column };
+        if (this.#autoRedraw) {
+            if (previous && this.#fillStyle === 'default') {
+                this.#redrawCell(previous.row, previous.column);
+            }
+            this.#redrawCell(row, column);
+        }
+    }
+
+    clearActiveCell = () => {
+        const previous = this.#activeCell;
+        this.#activeCell = null;
+        if (previous && this.#autoRedraw) {
+            this.#redrawCell(previous.row, previous.column);
+        }
+    }
+
+    getActiveCell = () => {
+        return this.#activeCell ? { ...this.#activeCell } : null;
+    }
+
+    setActiveColor = (color) => {
+        this.#assertColor(color);
+        this.#activeColor = color;
+        if (this.#activeCell && this.#autoRedraw) {
+            this.#redrawCell(this.#activeCell.row, this.#activeCell.column);
+        }
+    }
+
+    getActiveColor = () => {
+        return this.#activeColor;
+    }
+
     // clear one cell
     clearCell = (row, column) => {
         this.#checkCellCoords(row, column);
         this.#grid[row][column] = 0;
-        if (!this.#autoRedraw) {
-            return;
+        if (this.#autoRedraw) {
+            this.#redrawCell(row, column);
         }
+    }
+
+    // Restore a cell and intersecting borders without changing its stored color.
+    #redrawCell = (row, column) => {
         if (this.#fillStyle !== 'default') {
             this.redraw();
             return;
@@ -237,6 +297,7 @@ class SquareGrid {
                 this.#strokeCell(r, c);
             }
         }
+        this.#drawActiveCell();
         context.restore();
     }
 
@@ -333,6 +394,7 @@ class SquareGrid {
                 this.#strokeCell(rowIdx, columnIdx);
             });
         });
+        this.#drawActiveCell();
     }
 
     // check that the cell coordinates are in bounds

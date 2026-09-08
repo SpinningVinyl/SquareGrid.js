@@ -11,11 +11,14 @@
   <body>
     <p>Click to colour a cell.</p>
     <p>Alt+click to clear a cell.</p>
+    <p>Ctrl+click to activate/deactivate a cell.</p>
     <div id="container"></div>
     <p>Current fill style: <span id="styleLabel">default</span></p>
     <button id="styleButton">Change fill style</button>
     <script>
       const myGrid = new SquareGrid(20, 10, 40, document.querySelector('#container'));
+      myGrid.setGridColor('#777777');
+      myGrid.setActiveColor('red');
       myGrid.setAlwaysDrawGrid(true);
 
       const styleMap = new Map();
@@ -34,12 +37,19 @@
           }
           const styleString = styleMap.get(currentStyle);
           label.innerText = styleString;
-          myGrid.setFillStyle(styleString);          
+          myGrid.setFillStyle(styleString);
       }
       
-      myGrid.setOnClickCallback((row, column, {altKey}) => {
+      myGrid.setOnClickCallback((row, column, { altKey , ctrlKey }) => {
           if (altKey) {
               myGrid.clearCell(row, column);
+          } else if (ctrlKey) {
+              const activeCell = myGrid.getActiveCell();
+              if (activeCell?.row === row && activeCell.column === column) {
+                  myGrid.clearActiveCell();
+              } else {
+                  myGrid.setActiveCell(row, column);
+              }              
           } else {
               myGrid.setCellColor(row, column, getRandomColor());    
           }

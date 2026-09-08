@@ -72,6 +72,27 @@ case, call `redraw()` after making your changes. Unsupported styles are rejected
 Diamond and circle cell updates redraw the whole grid to preserve smooth edges.
 For multiple updates, disable automatic redraw and call `redraw()` once afterward.
 
+### Highlight the active cell
+
+```js
+myGrid.setActiveCell(2, 3);
+myGrid.setActiveColor('orange'); // optional; orange is the default
+const active = myGrid.getActiveCell(); // { row: 2, column: 3 }, or null
+myGrid.clearActiveCell();
+```
+
+One cell can be active at a time. Its highlight is an inset border drawn over
+the cell, including empty cells, with any fill style and even when grid outlines
+are disabled. Highlighting never changes the stored cell color. `getActiveCell()`
+returns a copy; `getActiveColor()` returns the highlight color.
+
+Clearing cell colors with `clearCell()` or `clearGrid()` preserves the active
+selection. Use `clearActiveCell()` to remove it. Clicks do not automatically
+select a cell; the application decides when to call `setActiveCell()`.
+
+These setters respect `setAutoRedraw(false)`. With default fills, moving the
+selection repaints the old and new cells; shape fills use a full redraw.
+
 ### Get the colour of a cell
 
 ```
