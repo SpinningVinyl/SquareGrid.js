@@ -36,6 +36,28 @@ class SquareGrid {
         }
     }
 
+    #assertColor = (color) => {
+        if (typeof color !== 'string') {
+            throw new TypeError('colour must be a CSS colour string');
+        }
+
+        const context = this.#context;
+        context.save();
+        context.fillStyle = '#000000';
+        context.fillStyle = color;
+        const first = context.fillStyle;
+
+        context.fillStyle = '#ffffff';
+        context.fillStyle = color;
+        const second = context.fillStyle;
+
+        context.restore();
+
+        if (first !== second) {
+            throw new TypeError(`Invalid colour: ${color}`);
+        }
+    }
+
     constructor(rows = 50, columns = 50, squareSize = 20, parentElement, onClickCallback) {
         SquareGrid.#assertPositiveInteger('rows', rows);
         SquareGrid.#assertPositiveInteger('columns', columns);
@@ -137,6 +159,7 @@ class SquareGrid {
     }
     
     setCellColor = (row, column, color) => {
+        this.#assertColor(color);
         this.#checkCellCoords(row, column);
         this.#grid[row][column] = color;
         if (this.#autoRedraw) {
@@ -306,6 +329,7 @@ class SquareGrid {
     }
     
     setDefaultColor = (color) => {
+        this.#assertColor(color);
         this.#defaultColor = color;
         if (this.#autoRedraw) {
             this.redraw();
@@ -315,6 +339,9 @@ class SquareGrid {
         return this.#defaultColor;
     }
     setGridColor = (color) => {
+        if (color) {
+            this.#assertColor(color);
+        }
         this.#gridColor = color;
         if (this.#autoRedraw) {
             this.redraw();
