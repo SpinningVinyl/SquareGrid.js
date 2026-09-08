@@ -54,6 +54,24 @@ function getRandomColor() {
 myGrid.setCellColor(5, 5, getRandomColor());
 ```
 
+### Choose the cell fill style
+
+```js
+myGrid.setFillStyle('diamond'); // 'default', 'diamond', or 'circle'
+const style = myGrid.getFillStyle();
+```
+
+The style applies to all explicitly colored cells. The initial `default` style
+fills the whole cell. `diamond` and `circle` draw filled shapes centered inside
+each cell, inset by 10% of the cell size (at least 1 pixel) from its boundary.
+The surrounding background uses the default color; grid outlines keep their
+existing settings. Cell colors and click coordinates are unchanged.
+
+Changing the style redraws the grid unless automatic redraw is disabled. In that
+case, call `redraw()` after making your changes. Unsupported styles are rejected.
+Diamond and circle cell updates redraw the whole grid to preserve smooth edges.
+For multiple updates, disable automatic redraw and call `redraw()` once afterward.
+
 ### Get the colour of a cell
 
 ```

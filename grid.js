@@ -6,6 +6,7 @@ class SquareGrid {
     #minSize = 5;
     #defaultColor = "white";
     #gridColor = "black";
+    #fillStyle = "default";
     #alwaysDrawGrid = false;
     #autoRedraw = true;
     #pixelRatioQuery;
@@ -163,7 +164,12 @@ class SquareGrid {
         this.#checkCellCoords(row, column);
         this.#grid[row][column] = color;
         if (this.#autoRedraw) {
-            this.#drawCell(row, column);
+            if (this.#fillStyle === 'default') {
+                this.#drawCell(row, column);
+            } else {
+                // ponytail: full redraw avoids clipped shape artifacts; batch large updates.
+                this.redraw();
+            }
         }
     }
     
@@ -191,42 +197,47 @@ class SquareGrid {
     clearCell = (row, column) => {
         this.#checkCellCoords(row, column);
         this.#grid[row][column] = 0;
-        if (this.#autoRedraw) {
-            const context = this.#context;
-            const size = this.squareSize;
-            const transform = context.getTransform();
-            const ratio = transform.a;
-            // Snap to backing pixels, with a one-pixel margin for antialiased edges.
-            const left = Math.floor((column * size + 0.5) * ratio) - 1;
-            const top = Math.floor((row * size + 0.5) * ratio) - 1;
-            const right = Math.ceil((column * size + size + 1.5) * ratio) + 1;
-            const bottom = Math.ceil((row * size + size + 1.5) * ratio) + 1;
-
-            context.save();
-            context.setTransform(1, 0, 0, 1, 0, 0);
-            context.beginPath();
-            context.rect(left, top, right - left, bottom - top);
-            context.clip();
-            context.clearRect(left, top, right - left, bottom - top);
-            context.fillStyle = this.#defaultColor;
-            context.fillRect(left, top, right - left, bottom - top);
-            context.setTransform(transform);
-
-            // Restore intersecting cells in the same order as redraw(), including corners.
-            const firstRow = Math.max(0, Math.floor((top / ratio - 1.5) / size));
-            const lastRow = Math.min(this.rows - 1, Math.floor((bottom / ratio - 0.5) / size));
-            const firstColumn = Math.max(0, Math.floor((left / ratio - 1.5) / size));
-            const lastColumn = Math.min(this.columns - 1, Math.floor((right / ratio - 0.5) / size));
-            for (let r = firstRow; r <= lastRow; r++) {
-                for (let c = firstColumn; c <= lastColumn; c++) {
-                    if (this.#grid[r][c]) {
-                        this.#fillCell(r, c);
-                    }
-                    this.#strokeCell(r, c);
-                }
-            }
-            context.restore();
+        if (!this.#autoRedraw) {
+            return;
         }
+        if (this.#fillStyle !== 'default') {
+            this.redraw();
+            return;
+        }
+        const context = this.#context;
+        const size = this.squareSize;
+        const transform = context.getTransform();
+        const ratio = transform.a;
+        // Snap to backing pixels, with a one-pixel margin for antialiased edges.
+        const left = Math.floor((column * size + 0.5) * ratio) - 1;
+        const top = Math.floor((row * size + 0.5) * ratio) - 1;
+        const right = Math.ceil((column * size + size + 1.5) * ratio) + 1;
+        const bottom = Math.ceil((row * size + size + 1.5) * ratio) + 1;
+
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.beginPath();
+        context.rect(left, top, right - left, bottom - top);
+        context.clip();
+        context.clearRect(left, top, right - left, bottom - top);
+        context.fillStyle = this.#defaultColor;
+        context.fillRect(left, top, right - left, bottom - top);
+        context.setTransform(transform);
+
+        // Restore intersecting cells in the same order as redraw(), including corners.
+        const firstRow = Math.max(0, Math.floor((top / ratio - 1.5) / size));
+        const lastRow = Math.min(this.rows - 1, Math.floor((bottom / ratio - 0.5) / size));
+        const firstColumn = Math.max(0, Math.floor((left / ratio - 1.5) / size));
+        const lastColumn = Math.min(this.columns - 1, Math.floor((right / ratio - 0.5) / size));
+        for (let r = firstRow; r <= lastRow; r++) {
+            for (let c = firstColumn; c <= lastColumn; c++) {
+                if (this.#grid[r][c]) {
+                    this.#fillCell(r, c);
+                }
+                this.#strokeCell(r, c);
+            }
+        }
+        context.restore();
     }
 
     // clear all cells in a grid
@@ -254,7 +265,27 @@ class SquareGrid {
         } else {
             context.fillStyle = defaultColor;
         }
-        context.fillRect(column * squareSize + 1, row * squareSize + 1, squareSize, squareSize);
+        const x = column * squareSize + 1;
+        const y = row * squareSize + 1;
+        if (this.#fillStyle === 'default') {
+            context.fillRect(x, y, squareSize, squareSize);
+            return;
+        }
+
+        const centerX = x + squareSize / 2;
+        const centerY = y + squareSize / 2;
+        const radius = squareSize / 2 - Math.max(1, squareSize * 0.1);
+        context.beginPath();
+        if (this.#fillStyle === 'circle') {
+            context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        } else {
+            context.moveTo(centerX, centerY - radius);
+            context.lineTo(centerX + radius, centerY);
+            context.lineTo(centerX, centerY + radius);
+            context.lineTo(centerX - radius, centerY);
+            context.closePath();
+        }
+        context.fill();
     }
     
     // draw the border around the cell
@@ -288,6 +319,7 @@ class SquareGrid {
         // Fill every backing pixel, including rounding at fractional pixel ratios.
         context.save();
         context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, canvas.width, canvas.height);
         context.fillStyle = this.#defaultColor;
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.restore();
@@ -370,6 +402,23 @@ class SquareGrid {
         return Math.max(0, Math.min(row, rows - 1));
     }
     
+    setFillStyle = (style) => {
+        if (typeof style !== 'string') {
+            throw new TypeError('fill style must be a string.');
+        }
+        if (!['default', 'diamond', 'circle'].includes(style)) {
+            throw new RangeError('fill style must be default, diamond, or circle.');
+        }
+        this.#fillStyle = style;
+        if (this.#autoRedraw) {
+            this.redraw();
+        }
+    }
+
+    getFillStyle = () => {
+        return this.#fillStyle;
+    }
+
     setDefaultColor = (color) => {
         this.#assertColor(color);
         this.#defaultColor = color;

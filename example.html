@@ -12,11 +12,31 @@
     <p>Click to colour a cell.</p>
     <p>Alt+click to clear a cell.</p>
     <div id="container"></div>
+    <p>Current fill style: <span id="styleLabel">default</span></p>
+    <button id="styleButton">Change fill style</button>
     <script>
-      const myGrid = new SquareGrid(20, 10, 20, document.querySelector('#container'));
+      const myGrid = new SquareGrid(20, 10, 40, document.querySelector('#container'));
       myGrid.setAlwaysDrawGrid(true);
-      myGrid.redraw();
 
+      const styleMap = new Map();
+      styleMap.set(0, "default");
+      styleMap.set(1, "diamond");
+      styleMap.set(2, "circle");
+
+      let currentStyle = 0;
+
+      const btn = document.querySelector('#styleButton');
+      const label = document.querySelector('#styleLabel');
+      btn.onclick = () => {
+          currentStyle += 1;
+          if (currentStyle > 2) {
+              currentStyle = 0;
+          }
+          const styleString = styleMap.get(currentStyle);
+          label.innerText = styleString;
+          myGrid.setFillStyle(styleString);          
+      }
+      
       myGrid.setOnClickCallback((row, column, {altKey}) => {
           if (altKey) {
               myGrid.clearCell(row, column);
