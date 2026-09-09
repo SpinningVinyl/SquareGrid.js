@@ -385,6 +385,153 @@ runCheck('setActiveColor: rejects invalid colors without changing selection', ()
     }
 }));
 
+function checkAnimation(check) {
+    const request = window.requestAnimationFrame;
+    const cancel = window.cancelAnimationFrame;
+    const nowDescriptor = Object.getOwnPropertyDescriptor(performance, 'now');
+    let now = 1000;
+    let id = 0;
+    const frames = new Map();
+    window.requestAnimationFrame = callback => { frames.set(++id, callback); return id; };
+    window.cancelAnimationFrame = frame => frames.delete(frame);
+    Object.defineProperty(performance, 'now', {configurable: true, value: () => now});
+    const step = milliseconds => {
+        now += milliseconds;
+        const callbacks = [...frames.values()];
+        frames.clear();
+        callbacks.forEach(callback => callback(now));
+    };
+    try {
+        checkDrawing((grid, pixels, expect, pixel) => check(grid, pixels, expect, pixel, step, frames));
+    } finally {
+        window.requestAnimationFrame = request;
+        window.cancelAnimationFrame = cancel;
+        if (nowDescriptor) Object.defineProperty(performance, 'now', nowDescriptor);
+        else delete performance.now;
+    }
+}
+
+for (const mode of ['fade', 'expand']) {
+    for (const style of ['default', 'diamond', 'circle']) {
+        runCheck(`${mode}/${style}: progress, redraw, and unchanged cells`, () => checkAnimation((grid, pixels, expect, pixel, step, frames) => {
+            grid.setFillStyle(style);
+            grid.setCellColor(1, 1, 'blue');
+            grid.setGridColor(false);
+            grid.setAnimation(mode);
+            grid.setAnimationDuration(200);
+            grid.setCellColor(0, 0, 'red');
+            expect(grid.getCellColor(0, 0) === 'red', 'Stored color is delayed');
+            pixel(11, 11, [255, 255, 255, 255]);
+            expect(frames.size === 1, 'Expected one scheduled frame');
+            const start = pixels();
+            grid.redraw();
+            expect(pixels().every((value, i) => value === start[i]), 'Redraw advanced animation time');
+            step(100);
+            const middle = pixels();
+            expect(middle.some((value, i) => value !== start[i]), 'Animation did not progress');
+            pixel(31, 31, [0, 0, 255, 255]);
+            grid.setCellColor(0, 0, 'red');
+            grid.redraw();
+            step(100);
+            expect(frames.size === 0, 'Same color or redraw restarted animation');
+            pixel(11, 11, [255, 0, 0, 255]);
+            const final = pixels();
+            grid.redraw();
+            expect(pixels().every((value, i) => value === final[i]), 'Completed animation differs from static drawing');
+        }));
+        runCheck(`${mode}/${style}: clear and interruption`, () => checkAnimation((grid, pixels, expect, pixel, step, frames) => {
+            grid.setFillStyle(style);
+            grid.setGridColor(false);
+            grid.setCellColor(0, 0, 'red');
+            grid.setAnimation(mode);
+            grid.clearCell(0, 0);
+            expect(grid.getCellColor(0, 0) === 'white', 'Cleared data was not updated immediately');
+            pixel(11, 11, [255, 0, 0, 255]);
+            step(100);
+            const middle = pixels();
+            grid.setCellColor(0, 0, 'blue');
+            expect(pixels().every((value, i) => value === middle[i]), 'Interrupted animation jumped');
+            step(200);
+            pixel(11, 11, [0, 0, 255, 255]);
+            grid.clearCell(0, 0);
+            step(200);
+            expect(pixels().every(value => value === 255), 'Clear animation left pixels');
+            expect(frames.size === 0, 'Finished clear kept scheduling');
+        }));
+        runCheck(`${mode}/${style}: one loop, stable highlight, and bulk clear`, () => checkAnimation((grid, pixels, expect, pixel, step, frames) => {
+            grid.setFillStyle(style);
+            grid.setActiveColor('blue');
+            grid.setActiveCell(0, 0);
+            grid.setAnimation(mode);
+            grid.setCellColor(0, 0, 'red');
+            grid.setCellColor(1, 1, 'red');
+            expect(frames.size === 1, 'Multiple cells scheduled separate loops');
+            step(100);
+            pixel(3, 11, [0, 0, 255, 255]);
+            step(100);
+            grid.clearGrid();
+            expect(frames.size === 1, 'Bulk clear did not use one loop');
+            step(200);
+            pixel(11, 11, [255, 255, 255, 255]);
+            pixel(31, 31, [255, 255, 255, 255]);
+            pixel(3, 11, [0, 0, 255, 255]);
+        }));
+    }
+    runCheck(`${mode}: disabling, batching, style changes, and destruction`, () => checkAnimation((grid, pixels, expect, pixel, step, frames) => {
+        grid.setAnimation(mode);
+        grid.setCellColor(0, 0, 'red');
+        grid.setAnimation('none');
+        expect(frames.size === 0, 'Disabling animation did not cancel frame');
+        pixel(11, 11, [255, 0, 0, 255]);
+        grid.setAnimation(mode);
+        grid.clearCell(0, 0);
+        const before = pixels();
+        grid.setAutoRedraw(false);
+        expect(frames.size === 0, 'Disabling redraw did not cancel frame');
+        grid.setCellColor(1, 1, 'blue');
+        expect(pixels().every((value, i) => value === before[i]), 'Batch drew immediately');
+        grid.redraw();
+        pixel(11, 11, [255, 255, 255, 255]);
+        pixel(31, 31, [0, 0, 255, 255]);
+        grid.setAutoRedraw(true);
+        grid.setCellColor(0, 0, 'red');
+        grid.setFillStyle('circle');
+        expect(frames.size === 0, 'Style change retained stale snapshots');
+        grid.clearCell(0, 0);
+        grid.setDefaultColor('blue');
+        expect(frames.size === 0, 'Background change retained stale snapshots');
+        grid.setCellColor(0, 0, 'red');
+        grid.destroy();
+        expect(frames.size === 0, 'Destroy did not cancel frame');
+        grid.clearCell(0, 0);
+        expect(frames.size === 0, 'Destroyed grid scheduled an animation');
+    }));
+}
+runCheck('Animation: defaults, zero duration, and invalid settings', () => checkAnimation((grid, pixels, expect, pixel, step, frames) => {
+    expect(grid.getAnimation() === 'none' && grid.getAnimationDuration() === 200, 'Incorrect defaults');
+    grid.setCellColor(0, 0, 'red');
+    expect(frames.size === 0, 'Default mode scheduled a frame');
+    grid.setAnimation('fade');
+    grid.clearCell(0, 0);
+    grid.setAnimationDuration(0);
+    grid.setCellColor(0, 0, 'blue');
+    step(0);
+    pixel(11, 11, [0, 0, 255, 255]);
+    expect(frames.size === 0, 'Zero duration kept animating');
+    for (const invalid of [-1, NaN, Infinity, '200', null]) {
+        let error;
+        try { grid.setAnimationDuration(invalid); } catch (caught) { error = caught; }
+        expect(error instanceof TypeError || error instanceof RangeError, 'Invalid duration accepted');
+        expect(grid.getAnimationDuration() === 0, 'Invalid duration changed state');
+    }
+    for (const invalid of ['zoom', '', null]) {
+        let error;
+        try { grid.setAnimation(invalid); } catch (caught) { error = caught; }
+        expect(error instanceof RangeError, 'Invalid mode accepted');
+        expect(grid.getAnimation() === 'fade', 'Invalid mode changed state');
+    }
+}));
+
 const originalRatio = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
 try {
     for (const ratio of [0.5, 0.8, 1, 1.25, 2]) {

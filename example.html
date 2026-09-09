@@ -15,29 +15,51 @@
     <div id="container"></div>
     <p>Current fill style: <span id="styleLabel">default</span></p>
     <button id="styleButton">Change fill style</button>
+    <p>Current animation: <span id="animationsLabel">none</span></p>
+    <button id="animationsButton">Change animations</button>
     <script>
       const myGrid = new SquareGrid(20, 10, 40, document.querySelector('#container'));
       myGrid.setGridColor('#777777');
       myGrid.setActiveColor('red');
       myGrid.setAlwaysDrawGrid(true);
+      myGrid.setAnimation('none');
 
       const styleMap = new Map();
       styleMap.set(0, "default");
       styleMap.set(1, "diamond");
       styleMap.set(2, "circle");
 
+      const animationsMap = new Map();
+      animationsMap.set(0, "none");
+      animationsMap.set(1, "fade");
+      animationsMap.set(2, "expand");
+
       let currentStyle = 0;
 
-      const btn = document.querySelector('#styleButton');
-      const label = document.querySelector('#styleLabel');
-      btn.onclick = () => {
+      const styleBtn = document.querySelector('#styleButton');
+      const styleLabel = document.querySelector('#styleLabel');
+      styleBtn.onclick = () => {
           currentStyle += 1;
           if (currentStyle > 2) {
               currentStyle = 0;
           }
           const styleString = styleMap.get(currentStyle);
-          label.innerText = styleString;
+          styleLabel.innerText = styleString;
           myGrid.setFillStyle(styleString);
+      }
+
+      let currentAnimations = 0;
+      
+      const animationsBtn = document.querySelector('#animationsButton');
+      const animationsLabel = document.querySelector('#animationsLabel');
+      animationsBtn.onclick = () => {
+          currentAnimations += 1;
+          if (currentAnimations > 2) {
+              currentAnimations = 0;
+          }
+          const animationsString = animationsMap.get(currentAnimations);
+          animationsLabel.innerText = animationsString;
+          myGrid.setAnimation(animationsString);
       }
       
       myGrid.setOnClickCallback((row, column, { altKey , ctrlKey }) => {
