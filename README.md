@@ -74,6 +74,8 @@ For multiple updates, disable automatic redraw and call `redraw()` once afterwar
 
 ### Animate cell changes
 
+Recent versions of SquareGrid.js support animations on cell transitions:
+
 ```js
 myGrid.setAnimation('fade');       // 'none' (default), 'fade', or 'expand'
 myGrid.setAnimationDuration(200);  // milliseconds; 200 by default
@@ -82,23 +84,15 @@ myGrid.clearCell(2, 3);
 ```
 
 `fade` blends the old appearance into the new one. `expand` reveals the new fill
-outward from the cell center; clearing shrinks the old fill back toward its center.
+outward from the cell center; clearing shrinks the fill back toward its center.
 Both modes work with every fill style. Grid borders and the active-cell highlight
-are not animated. An outline around a clearing cell remains until its animation ends.
+are not animated. Only changed cells animate, including when using `clearGrid()`.
 
-Only changed cells animate, including when using `clearGrid()`. Setting the same
-stored color again does not restart a transition. Stored colors update immediately;
-`redraw()` displays current progress without starting or restarting animations.
-Changing a cell mid-animation starts its new transition from its current appearance.
-
-Use `getAnimation()` and `getAnimationDuration()` to inspect the settings. A zero
-duration makes subsequent changes immediate. Durations must be finite, non-negative
-numbers. Changing the animation mode finishes pending transitions. Changing the
-fill style or default background color also finishes them before redrawing.
+You can use `getAnimation()` and `getAnimationDuration()` to inspect the settings.
+A zero duration makes subsequent changes immediate.
 
 With automatic redraw disabled, changes apply without animation on the next manual
-`redraw()`. Disabling automatic redraw cancels pending transitions without drawing.
-`destroy()` cancels the animation loop. Duration changes affect future transitions.
+`redraw()`.
 
 Animation uses one `requestAnimationFrame` loop per grid. Each frame repaints the
 grid, but only changing cells have animated content; each transition temporarily
@@ -114,10 +108,11 @@ const active = myGrid.getActiveCell(); // { row: 2, column: 3 }, or null
 myGrid.clearActiveCell();
 ```
 
-One cell can be active at a time. Its highlight is an inset border drawn over
+Only one cell can be active at a time. Its highlight is an inset border drawn over
 the cell, including empty cells, with any fill style and even when grid outlines
 are disabled. Highlighting never changes the stored cell color. `getActiveCell()`
-returns a copy; `getActiveColor()` returns the highlight color.
+returns the coordinates of the active cell as `{row, column}`; `getActiveColor()`
+returns the highlight color.
 
 Clearing cell colors with `clearCell()` or `clearGrid()` preserves the active
 selection. Use `clearActiveCell()` to remove it. Clicks do not automatically
