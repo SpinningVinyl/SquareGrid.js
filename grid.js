@@ -13,6 +13,10 @@ class SquareGrid {
     #autoRedraw = true;
     #pixelRatioQuery;
     #destroyed = false;
+    #animation = 'none';
+    #animationDuration = 200;
+    #animations = new Map();
+    #animationFrame = null;
 
     static #assertPositiveInteger(name, value) {
         if (typeof value !== 'number') {
@@ -139,6 +143,7 @@ class SquareGrid {
         }
 
         this.#destroyed = true;
+        this.#stopAnimations();
         this.#canvas.removeEventListener('click', this.#onMouseClick);
         this.#pixelRatioQuery?.removeEventListener('change', this.#onPixelRatioChange);
         this.#pixelRatioQuery = undefined;
@@ -164,9 +169,13 @@ class SquareGrid {
     setCellColor = (row, column, color) => {
         this.#assertColor(color);
         this.#checkCellCoords(row, column);
+        const previous = this.#grid[row][column];
         this.#grid[row][column] = color;
+        this.#animateCell(row, column, previous);
         if (this.#autoRedraw) {
-            if (this.#fillStyle === 'default') {
+            if (this.#animations.size) {
+                this.redraw();
+            } else if (this.#fillStyle === 'default') {
                 this.#drawCell(row, column);
             } else {
                 // ponytail: full redraw avoids clipped shape artifacts; batch large updates.
@@ -252,7 +261,9 @@ class SquareGrid {
     // clear one cell
     clearCell = (row, column) => {
         this.#checkCellCoords(row, column);
+        const previous = this.#grid[row][column];
         this.#grid[row][column] = 0;
+        this.#animateCell(row, column, previous);
         if (this.#autoRedraw) {
             this.#redrawCell(row, column);
         }
@@ -260,7 +271,7 @@ class SquareGrid {
 
     // Restore a cell and intersecting borders without changing its stored color.
     #redrawCell = (row, column) => {
-        if (this.#fillStyle !== 'default') {
+        if (this.#fillStyle !== 'default' || this.#animations.size) {
             this.redraw();
             return;
         }
@@ -307,7 +318,9 @@ class SquareGrid {
         const { rows, columns } = this;
         for (let row = 0; row < rows; row++) {
             for (let column = 0; column < columns; column++) {
+                const previous = grid[row][column];
                 grid[row][column] = 0;
+                this.#animateCell(row, column, previous);
             }
         }
         if (this.#autoRedraw) {
@@ -316,16 +329,9 @@ class SquareGrid {
     }
 
     // fill one individual cell
-    #fillCell = (row, column) => {
+    #fillCell = (row, column, color = this.#grid[row][column], context = this.#context) => {
         const { squareSize } = this;
-        const grid = this.#grid;
-        const context = this.#context;
-        const defaultColor = this.#defaultColor;
-        if (grid[row][column]) {
-            context.fillStyle = grid[row][column];
-        } else {
-            context.fillStyle = defaultColor;
-        }
+        context.fillStyle = color || this.#defaultColor;
         const x = column * squareSize + 1;
         const y = row * squareSize + 1;
         if (this.#fillStyle === 'default') {
@@ -385,13 +391,24 @@ class SquareGrid {
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.restore();
         // draw visible cells
+        const now = performance.now();
+        for (const [key, animation] of this.#animations) {
+            if (now - animation.start >= animation.duration) this.#animations.delete(key);
+        }
         const grid = this.#grid;
         grid.forEach((row, rowIdx) => {
             row.forEach((cellColor, columnIdx) => {
-                if (cellColor) {
+                const animation = this.#animations.get(rowIdx * this.columns + columnIdx);
+                if (animation) {
+                    this.#paintAnimation(context, animation, now,
+                        columnIdx * this.squareSize + 1, rowIdx * this.squareSize + 1);
+                } else if (cellColor) {
                     this.#fillCell(rowIdx, columnIdx);
                 }
                 this.#strokeCell(rowIdx, columnIdx);
+                if (animation?.clearing && this.#gridColor && !this.#alwaysDrawGrid) {
+                    this.#strokeCellWithColor(rowIdx, columnIdx, this.#gridColor);
+                }
             });
         });
         this.#drawActiveCell();
@@ -464,6 +481,110 @@ class SquareGrid {
         return Math.max(0, Math.min(row, rows - 1));
     }
     
+    setAnimation = (mode) => {
+        if (!['none', 'fade', 'expand'].includes(mode)) {
+            throw new RangeError('animation must be none, fade, or expand.');
+        }
+        this.#animation = mode;
+        const pending = this.#animations.size;
+        this.#stopAnimations();
+        if (pending && this.#autoRedraw) this.redraw();
+    }
+
+    getAnimation = () => this.#animation;
+
+    setAnimationDuration = (milliseconds) => {
+        if (typeof milliseconds !== 'number') {
+            throw new TypeError('animation duration must be a number.');
+        }
+        if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+            throw new RangeError('animation duration must be finite and non-negative.');
+        }
+        this.#animationDuration = milliseconds;
+    }
+
+    getAnimationDuration = () => this.#animationDuration;
+
+    #stopAnimations = () => {
+        if (this.#animationFrame !== null) cancelAnimationFrame(this.#animationFrame);
+        this.#animationFrame = null;
+        this.#animations.clear();
+    }
+
+    #onAnimationFrame = () => {
+        this.#animationFrame = null;
+        if (this.#destroyed || !this.#autoRedraw) return;
+        // ponytail: repaint the grid each frame; dirty regions if large animated grids need it.
+        this.redraw();
+        if (this.#animations.size) {
+            this.#animationFrame = requestAnimationFrame(this.#onAnimationFrame);
+        }
+    }
+
+    #animateCell = (row, column, previous) => {
+        const color = this.#grid[row][column];
+        if (previous === color) return;
+        const key = row * this.columns + column;
+        if (this.#destroyed || !this.#autoRedraw ||
+            this.#animation === 'none' || this.#animationDuration === 0) {
+            this.#animations.delete(key);
+            return;
+        }
+        const current = this.#animations.get(key);
+        const size = this.squareSize;
+        const now = performance.now();
+        const snapshot = (value, animation) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = Math.ceil(size * this.#context.getTransform().a);
+            const context = canvas.getContext('2d');
+            context.scale(canvas.width / size, canvas.height / size);
+            if (animation) {
+                this.#paintAnimation(context, animation, now, 0, 0);
+            } else {
+                context.fillStyle = this.#defaultColor;
+                context.fillRect(0, 0, size, size);
+                if (value) {
+                    context.translate(-column * size - 1, -row * size - 1);
+                    this.#fillCell(row, column, value, context);
+                }
+            }
+            return canvas;
+        };
+        this.#animations.set(key, {
+            from: snapshot(previous, current), to: snapshot(color), start: now,
+            duration: this.#animationDuration, mode: this.#animation, clearing: !color
+        });
+        if (this.#animationFrame === null) {
+            this.#animationFrame = requestAnimationFrame(this.#onAnimationFrame);
+        }
+    }
+
+    #paintAnimation = (context, animation, now, x, y) => {
+        const size = this.squareSize;
+        const progress = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
+        context.save();
+        context.beginPath();
+        context.rect(x, y, size, size);
+        context.clip();
+        context.clearRect(x, y, size, size);
+        if (animation.mode === 'fade') {
+            context.globalAlpha = 1 - progress;
+            context.drawImage(animation.from, x, y, size, size);
+            context.globalCompositeOperation = 'lighter';
+            context.globalAlpha = progress;
+            context.drawImage(animation.to, x, y, size, size);
+        } else {
+            context.drawImage(animation.clearing ? animation.to : animation.from, x, y, size, size);
+            context.beginPath();
+            context.arc(x + size / 2, y + size / 2,
+                size * Math.SQRT1_2 * (animation.clearing ? 1 - progress : progress), 0, Math.PI * 2);
+            context.clip();
+            context.clearRect(x, y, size, size);
+            context.drawImage(animation.clearing ? animation.from : animation.to, x, y, size, size);
+        }
+        context.restore();
+    }
+
     setFillStyle = (style) => {
         if (typeof style !== 'string') {
             throw new TypeError('fill style must be a string.');
@@ -471,6 +592,7 @@ class SquareGrid {
         if (!['default', 'diamond', 'circle'].includes(style)) {
             throw new RangeError('fill style must be default, diamond, or circle.');
         }
+        this.#stopAnimations();
         this.#fillStyle = style;
         if (this.#autoRedraw) {
             this.redraw();
@@ -483,6 +605,7 @@ class SquareGrid {
 
     setDefaultColor = (color) => {
         this.#assertColor(color);
+        this.#stopAnimations();
         this.#defaultColor = color;
         if (this.#autoRedraw) {
             this.redraw();
@@ -515,6 +638,7 @@ class SquareGrid {
     
     setAutoRedraw = (b) => {
         this.#autoRedraw = b;
+        if (!b) this.#stopAnimations();
     }
     
     getAutoRedraw = () => {
