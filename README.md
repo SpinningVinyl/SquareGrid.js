@@ -38,7 +38,7 @@ The default colour is used as the background colour, and also for any cells that
 ### Set the color of a cell
 
 ```
-myGrid.setCellColor(row, column, color);
+myGrid.fillCell(row, column, color);
 ```
 
 For example, the following snippet would change the colour of a cell with the coordinates (5,5) randomly:
@@ -51,7 +51,7 @@ function getRandomColor() {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-myGrid.setCellColor(5, 5, getRandomColor());
+myGrid.fillCell(5, 5, getRandomColor());
 ```
 
 ### Choose the cell fill style
@@ -79,7 +79,7 @@ Recent versions of SquareGrid.js support animations on cell transitions:
 ```js
 myGrid.setAnimation('fade');       // 'none' (default), 'fade', or 'expand'
 myGrid.setAnimationDuration(200);  // milliseconds; 200 by default
-myGrid.setCellColor(2, 3, 'red');
+myGrid.fillCell(2, 3, 'red');
 myGrid.clearCell(2, 3);
 ```
 
