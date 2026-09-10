@@ -262,7 +262,7 @@ class SquareGrid {
             if (this.#animations.size) {
                 this.redraw();
             } else if (this.#fillStyle === 'default') {
-                this.#drawCell(row, column);
+                this.#redrawCell(row, column);
             } else {
                 // ponytail: full redraw avoids clipped shape artifacts; batch large updates.
                 this.redraw();
